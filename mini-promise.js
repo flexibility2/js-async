@@ -5,7 +5,18 @@ function miniPromise(fn) {
   this.onFullfilledCallBack = [];
   this.onRejectedCallBack = [];
 
-  const resolve = (res) => {
+  const resolutionProcedure = (promise, res) => {
+    if (promise === res) {
+      return reject(new TypeError("Chaining cycle detected for promise"));
+    }
+
+    if (res instanceof miniPromise) {
+      res.then(resolve, reject);
+      return;
+    }
+
+    if (this["[[PromiseState]]"] !== "pending") return;
+    this["[[PromiseResult]]"] = "fulfilled";
     this["[[PromiseResult]]"] = res;
     console.log("in resolve, data: ", res);
 
@@ -15,7 +26,14 @@ function miniPromise(fn) {
     });
   };
 
+  const resolve = (res) => {
+    resolutionProcedure(this, res);
+  };
+
   const reject = (err) => {
+    if (this["[[PromiseState]]"] !== "pending") return;
+    this["[[PromiseState]]"] = "rejected";
+    this["[[PromiseResult]]"] = err;
     console.log("in reject");
     this.onRejectedCallBack.forEach((fn) => {
       fn(err);
@@ -25,22 +43,49 @@ function miniPromise(fn) {
 }
 
 miniPromise.prototype.then = function (onFullfilled, onRejected) {
-  // sub
-  onFullfilled && this.onFullfilledCallBack.push(onFullfilled);
+  // sub v1
+  // onFullfilled && this.onFullfilledCallBack.push(onFullfilled);
+  // onRejected && this.onRejectedCallBack.push(onRejected);
+  // return this;
+  return new miniPromise((resolve, reject) => {
+    this.onFullfilledCallBack.push((value) => {
+      try {
+        const result = onFullfilled ? onFullfilled(value) : value;
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+};
+
+miniPromise.prototype.catch = function (onRejected) {
   onRejected && this.onRejectedCallBack.push(onRejected);
+  return this;
 };
 
 const mini = new miniPromise((resolve, reject) => {
   setTimeout(() => {
-    resolve("resolve");
+    resolve(1);
   }, 1000);
 });
 
-mini.then(
-  (data) => {
-    console.log("fullfilled in then");
-  },
-  (error) => {
-    console.log("rejected in then");
-  }
-);
+// mini
+//   .then(
+//     (data) => {
+//       console.log("fullfilled in then");
+//     },
+//     (error) => {
+//       console.log("rejected in then");
+//     }
+//   )
+//   .then(
+//     (data) => {
+//       console.log("fullfilled in second then");
+//     },
+//     (error) => {
+//       console.log("rejected in second then");
+//     }
+//   );
+
+mini.then((data) => data + 1).then((data) => console.log(data));
